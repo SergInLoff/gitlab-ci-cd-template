@@ -1,0 +1,67 @@
+variables:
+  CONFIG_BASE_YML_TEMPLATE_PATH: "ci/dynamic_templates/dynamic-base.v1.0.gitlab-ci.yml"
+  CONFIG_TRIGGER_YML_TEMPLATE_PATH: "ci/dynamic_templates/dynamic-trigger.v1.0.gitlab-ci.yml"
+  CONFIG_SERVICE_YML_TEMPLATE_PATH: "ci/dynamic_templates/service-template.v1.0.gitlab-ci.yml"
+
+stages:
+  - build
+  - trigger
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+
+
+generate-config:
+  stage: build
+  script:
+    # Приоритет у label мерджа, чтобы была возможность
+    # из разных веток собирать сервис при создании MR
+    - if [[ -n $CI_MERGE_REQUEST_LABELS ]]; then
+        WORKING_BRANCH=$CI_MERGE_REQUEST_LABELS;
+      else
+        WORKING_BRANCH=$CI_COMMIT_REF_NAME;
+      fi;
+
+    - echo $WORKING_BRANCH
+
+    - if [[ -z ${WORKING_BRANCH} ]]; then
+        echo "The service isn't defined!";
+        exit 1;
+      fi;
+
+    - cp $CONFIG_BASE_YML_TEMPLATE_PATH generated-config.yml
+
+    - echo 'Разбиваем входную строку на подстроки (разделитель ,)'
+    - IFS=',' read -ra ADDR <<< $WORKING_BRANCH
+    - echo "There are ${#ADDR[*]} words in the text."
+    - >
+      for i in ${ADDR[@]}; do
+        echo "Сервис '$i'"
+        export SERVICE_NAME="$i"
+        # Убрать  PARENT_PIPELINE_ID
+        export PARENT_PIPELINE_ID=$CI_PIPELINE_ID
+        cp $CONFIG_SERVICE_YML_TEMPLATE_PATH ${SERVICE_NAME}-config.yml
+        echo "" >> ${SERVICE_NAME}-config.yml
+        echo "  SERVICE_NAME: ${SERVICE_NAME}" >> ${SERVICE_NAME}-config.yml
+        echo $'\n' >> generated-config.yml
+        echo $'\n' >> generated-config.yml
+        envsubst < $CONFIG_TRIGGER_YML_TEMPLATE_PATH >> generated-config.yml
+      done
+
+  artifacts:
+    paths:
+      - generated-config.yml
+
+
+run-child-pipelines:
+  stage: trigger
+  variables:
+      GIT_CHECKOUT: "false"
+  trigger:
+    strategy: depend
+    include:
+      - artifact: generated-config.yml
+        job: generate-config
+  needs:
+    - job: generate-config

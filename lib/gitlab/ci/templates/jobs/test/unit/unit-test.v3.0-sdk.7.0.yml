@@ -1,0 +1,14 @@
+test:
+  image: mcr.microsoft.com/dotnet/sdk:7.0
+  stage: lint
+  tags:
+    - services-builder-docker
+  script:
+    - if [[ -z ${TEST_PROJECT_PATH} ]]; then
+        echo "The test project file path isn't defined!";
+        exit 0;
+      fi;
+
+    - dotnet test ${TEST_PROJECT_PATH}
+  when: on_success
+  allow_failure: true

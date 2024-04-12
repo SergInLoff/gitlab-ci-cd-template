@@ -1,0 +1,14 @@
+build:
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  stage: build
+  tags:
+    - services-builder-docker
+  script:
+    - if [[ -z ${PROJECT_PATH} ]]; then
+        echo "The project file path isn't defined!";
+        exit 1;
+      fi;
+    
+    - dotnet build  ${PROJECT_PATH}  --configuration Release
+  when: on_success
+  

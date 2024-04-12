@@ -1,0 +1,94 @@
+variables:
+  PROJECT_PATH: "" # полный путь до файла проекта
+  SETTINGS_FILE_PATH: "" # полный путь до файла конфигурации проекта
+  TEST_PROJECT_PATH: "" # полный путь до проекта с тестами
+  DOCKER_FILE_PATH: "" # full path to Dockerfile
+  IMAGE_NAME: ""   # name of service image
+  IMAGE_LIBRARY: "" # name of library (namespace) for storage image e.g. (docker.io/library/ubuntu)
+  STAGE_IMAGE_NAME: "" # the name of the image that is used in the stage job
+  
+  ENV_PARAMS_FILE: "" # full path of file with defined params (from root)
+  ENV_PARAMS_CLEAN_FILE: "" # full path of file with clear params (from root)
+
+  #----- Push or pipline parameters -------
+  SERVICE_NAME: "" # service name
+  VERSION: "$CI_PIPELINE_ID" # "$CI_MERGE_REQUEST_ID" # verion postfix (or tag)
+
+  #----- Global Gitlab variables ---------
+  REGISTRY_SERVER_HARBOR: "" # path for registry docker service
+  VERSION_REGISTRATION_SERVICE_PATH: "" # path for service version service
+
+  #----- stages start confirmation parameters ------
+  CONFIRM_BUILD_STAGE: "true" # confirmation of launch build stage
+  CONFIRM_LINT_STAGE: "true" # confirmation of launch lint stage
+  CONFIRM_TEST_STAGE: "true" # confirmation of launch test stage
+  CONFIRM_SONARQUBE_STAGE: "false" # confirmation of launch sonarqube stage
+  CONFIRM_DELIVERY_STAGE: "false" # Auto detect value in base template of CI/CD
+  CONFIRM_DEPLOY_TO_DEVELOPMENT_STAGE: "false" # confirmation of launch deploy to development stage
+  CONFIRM_DEPLOY_TO_TEST_STAGE: "false" # confirmation of launch deploy to test stage
+  CONFIRM_DEPLOY_TO_PRODUCTION_STAGE: "false" # confirmation of launch deploy to production stage
+
+  # Переменные для контроля изменений перед выводом на прод
+  MERGE_REQUESTS_IIDS: ()
+  PIPELINE_IDS: ()
+  FIRST_DOWNSTREAM_PIPELINE_ID: 0
+  SECOND_DOWNSTREAM_PIPELINE_ID: 0
+  CAN_DEPLOY_TO_PROD: "true"
+
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
+    
+
+stages:
+  - build
+  - lint
+  - docker-compose-up
+  - performance-test
+  - docker-compose-down
+  - test
+  - sonarqube
+  - master-changes-validation
+  - delivery
+  - nuget
+  - deploy-to-development
+  - deploy-to-test
+  - deploy-to-production-validation
+  - deploy-to-production
+  - collect-package-references
+  - deploy-to-test-after-production
+  - docs
+  - extra
+
+
+default:
+  before_script:
+  # Далее копирование файлов
+    - echo ${ENV_PARAMS_FILE}
+    # - echo ${ENV_PARAMS_CLEAN_FILE}
+
+  # Параметры GitLab
+    - echo ${CI_MERGE_REQUEST_ID}
+    - echo ${CI_PIPELINE_ID}
+  # Параметры проектов, по которым необходимо выполнить проверку и регистрацию тестов
+    - echo ${IMAGE_NAME}
+    - echo ${IMAGE_LIBRARY}
+    - echo ${STAGE_IMAGE_NAME}
+    - echo ${ENV_PARAMS_FILE}
+    # - echo ${ENV_PARAMS_CLEAN_FILE}
+    - echo ${SERVICE_NAME}
+    - echo ${VERSION}
+    - echo ${DOCKER_FILE_PATH}
+    - echo ${PROJECT_PATH}
+    - echo ${SETTINGS_FILE_PATH}
+    - echo ${TEST_PROJECT_PATH}
+    - echo ${CI_ENVIRONMENT_NAME}
+    - echo ${GITLAB_USER_LOGIN}
+    - echo Ветка мерджа $CI_COMMIT_BRANCH
+    - echo ветка по умолчанию $CI_DEFAULT_BRANCH
+    - echo $CI_JOB_STAGE
+    - echo $CI_COMMIT_MESSAGE
+    - echo $CAN_DEPLOY_TO_PROD

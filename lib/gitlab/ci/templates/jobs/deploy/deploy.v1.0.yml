@@ -1,0 +1,57 @@
+Deploy:Development:
+  stage: deploy-to-development
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-dev
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+
+Deploy:Test:
+  stage: deploy-to-test
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+Deploy:Staging:
+  stage: deploy-to-test
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test4
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+Deploy:Production:
+  stage: deploy-to-production
+  extends: .base_deploy_to_swarm_template
+  needs:
+    - job: deploy-to-production-validation
+  tags:
+    - services-production
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual

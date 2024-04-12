@@ -1,0 +1,9 @@
+Deploy:Test:
+  stage: deploy-to-test
+  environment: Test
+  variables:
+    GIT_CHECKOUT: "false"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  when: manual

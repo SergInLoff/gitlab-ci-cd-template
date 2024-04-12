@@ -1,0 +1,28 @@
+delivery:
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  stage: delivery
+  tags:
+    - services-builder-docker
+  script:
+    - if [[ -z ${PROJECT_PATH} ]]; then
+        echo "The project file path isn't defined!";
+        exit 1;
+      fi;
+    
+    - dotnet restore ${PROJECT_PATH}
+    - dotnet build ${PROJECT_PATH} --configuration Release --os win
+    - dotnet publish ${PROJECT_PATH} -c Release -o publish --os win
+
+    - export GZIP=-9
+
+    - du -sh publish/
+    - tar -zcvf publish.tar.gz publish
+    - du -sh publish.tar.gz
+    - rm -rf publish
+
+  artifacts:
+    paths:
+    - publish.tar.gz
+    expire_in: 1 days
+  
+  when: manual

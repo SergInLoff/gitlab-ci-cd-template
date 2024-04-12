@@ -1,0 +1,124 @@
+variables:
+  IMAGE_LIBRARY: ""
+  PORTAINER_INSTANCE: ""
+  PORTAINER_ENDPOINT_ID: ""
+
+.base_deploy_to_swarm_template:
+  before_script:
+    - echo PORTAINER_INSTANCE $PORTAINER_INSTANCE
+    - echo STACK_NAME $STACK_NAME
+  script:
+    - echo CAN_DEPLOY_TO_PROD $CAN_DEPLOY_TO_PROD
+    - if [[ "$CAN_DEPLOY_TO_PROD" == 'false' ]] || [[ "$CAN_DEPLOY_TO_PROD" == '' ]]; then
+        echo 'Не пройдена проверка на изменения в мастер ветке.';
+        exit 1;
+      fi;
+
+    - if [[ -z ${VERSION} ]]; then
+        echo "The project version isn't defined!";
+        exit 1;
+      fi;
+    - if [[ -z ${SERVICE_NAME} ]]; then
+        echo "The service name isn't defined!";
+        exit 1;
+      elif [[ -z ${REGISTRY_SERVER_HARBOR} ]]; then
+        echo "The path of docker registry server isn't defined!";
+        exit 1;
+      fi;
+
+    - export NEW_VERSION=$(echo $VERSION | awk -v new_number="$CI_PIPELINE_ID" -F. '{print $1"."$2"."$3"."new_number}')
+    - echo "Service version - ${NEW_VERSION}"
+
+    - |+
+      if [[ -z ${STACK_NAME} ]]; then
+        if [[ -z ${IMAGE_LIBRARY} ]]; then
+          IMAGE_NAME=${SERVICE_NAME};
+        else
+          IMAGE_NAME="${IMAGE_LIBRARY}/${SERVICE_NAME}";
+        fi;
+    
+        docker login -u "robot$"$REGISTRY_CI_USER -p $REGISTRY_CI_PASSWORD $REGISTRY_SERVER_HARBOR;
+
+        docker image pull $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${CI_ENVIRONMENT_NAME} || true;
+        docker tag $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${CI_ENVIRONMENT_NAME} $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:stable_${CI_ENVIRONMENT_NAME} || true;
+
+        docker image pull $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${NEW_VERSION};
+
+        docker tag $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${NEW_VERSION} $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${CI_ENVIRONMENT_NAME};
+        docker push $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${CI_ENVIRONMENT_NAME};
+
+        if ! [[ "$(docker image inspect $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${NEW_VERSION} --format="1")" == "1" ]]; then
+          echo "The image ${IMAGE_NAME} isn't  exists!";
+          exit 1;
+        fi;
+
+        echo IMAGE_NAME ${IMAGE_NAME};
+        docker service update --with-registry-auth --image $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${NEW_VERSION} --hostname ${SERVICE_NAME} ${SERVICE_NAME};
+        echo "Service ${SERVICE_NAME} updated!";
+
+        docker push $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:stable_${CI_ENVIRONMENT_NAME} || true;
+      else
+        curl -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"username":"'$PORTAINER_USERNAME'","password":"'$PORTAINER_PASSWORD'"}' ${PORTAINER_INSTANCE}/api/auth > TOKEN_RESPONSE_FILE;
+
+        cat TOKEN_RESPONSE_FILE;
+
+        export TOKEN=$(cat TOKEN_RESPONSE_FILE | jq -r .jwt);
+        echo TOKEN $TOKEN;
+          
+        curl -X GET \
+        -H "Authorization: Bearer $TOKEN" $PORTAINER_INSTANCE/api/stacks > STACK_ID_RESPONSE_FILE
+
+        cat STACK_ID_RESPONSE_FILE;
+
+        export STACK_ID=$(cat STACK_ID_RESPONSE_FILE | jq -r --arg stack_name "$STACK_NAME" '.[] | select(.Name == $stack_name) | .Id');
+        echo STACK_ID $STACK_ID;
+
+        curl -X GET \
+        -H "Authorization: Bearer $TOKEN" "$PORTAINER_INSTANCE/api/stacks/$STACK_ID/file" > DOCKER_COMPOSE_FILE
+
+        cat DOCKER_COMPOSE_FILE;
+
+        export OLD_VERSION=$(grep -oP "(?<=/$SERVICE_NAME:)[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" DOCKER_COMPOSE_FILE)
+        echo OLD_VERSION $OLD_VERSION
+
+        sed -i "s/\(\/$SERVICE_NAME:\)$OLD_VERSION/\1$NEW_VERSION/g" DOCKER_COMPOSE_FILE
+
+        export DOCKER_COMPOSE_CONTENT=$(cat DOCKER_COMPOSE_FILE | jq .StackFileContent);
+        echo DOCKER_COMPOSE_CONTENT $DOCKER_COMPOSE_CONTENT;
+
+        curl -X PUT \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        --data "{\"prune\":false,\"pullImage\":false,\"stackFileContent\":\"${DOCKER_COMPOSE_CONTENT:1:-1}\"}" "$PORTAINER_INSTANCE/api/stacks/$STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID";
+      fi;
+
+    - if [[ $CI_JOB_STAGE != "deploy-to-production" ]]; then
+        exit 0;
+      fi;
+
+    - echo "Register version"
+    - currentDate="$(date +'%Y-%m-%d %T')"
+    - desc="\"branchName\":\"$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME\",\"mergeRequestUrl\":\"$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID\",\"pipelineUrl\":\"$CI_PIPELINE_URL\",\"jobUrl\":\"$CI_JOB_URL\",\"assignee\":\"$CI_MERGE_REQUEST_ASSIGNEES\""
+    - echo $desc
+    - echo $currentDate
+    - > 
+      curl -X POST "$VERSION_REGISTRATION_SERVICE_PATH" 
+      -H "accept: text/plain" 
+      -H "Content-Type: application/json-patch+json"
+      --data "{\"id\":0,\"serviceCode\":\"$SERVICE_NAME\",\"version\":\"$NEW_VERSION\",\"dueDate\":\"$currentDate\",\"description\":{$desc}}"
+
+
+Deploy:Test:
+  stage: deploy-to-test
+  image: image-registry.dobrozaim.ru/services_department/docker_advanced:stable
+  environment: Test
+  variables:
+    GIT_CHECKOUT: "false"
+    PORTAINER_INSTANCE: "http://collection-agency.dobrozaim.test:9000"
+    PORTAINER_ENDPOINT_ID: "1"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - collection-agency.dobrozaim.test
+  when: manual

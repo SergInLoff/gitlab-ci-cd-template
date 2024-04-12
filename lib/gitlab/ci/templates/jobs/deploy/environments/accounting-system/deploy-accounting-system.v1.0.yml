@@ -1,0 +1,112 @@
+variables:
+  DEPLOY_SERVICE_NAME_PREFIX: ""
+
+.base_deploy_to_swarm_template:
+  script:
+    - if [[ -z ${VERSION} ]]; then
+        echo "The project version isn't defined!";
+        exit 1;
+      fi;
+    - if [[ -z ${SERVICE_NAME} ]]; then
+        echo "The service name isn't defined!";
+        exit 1;
+      elif [[ -z ${REGISTRY_SERVER_HARBOR} ]]; then
+        echo "The path of docker registry server isn't defined!";
+        exit 1;
+      fi;
+
+    - echo "Service version - ${VERSION}"
+    - if [[ -z ${IMAGE_LIBRARY} ]]; then
+        IMAGE=${SERVICE_NAME};
+      else
+        IMAGE="${IMAGE_LIBRARY}/${SERVICE_NAME}";
+      fi;
+
+    - docker image pull $REGISTRY_SERVER_HARBOR/${IMAGE}:${VERSION}
+
+    - if ! [[ "$(docker image inspect $REGISTRY_SERVER_HARBOR/${IMAGE}:${VERSION} --format="1")" == "1" ]]; then
+        echo "The image ${IMAGE} isn't  exists!";
+        exit 1;
+      fi;
+    
+    - echo ${IMAGE}
+    - docker service update --image $REGISTRY_SERVER_HARBOR/${IMAGE}:${VERSION} --hostname ${SERVICE_NAME} "accounting-system-${DEPLOY_SERVICE_NAME_PREFIX}_${SERVICE_NAME}"
+    - echo "Service ${SERVICE_NAME} updated!"
+
+    - if [[ $CI_JOB_STAGE != "deploy-to-production" ]]; then
+        exit 0;
+      fi;
+
+    # Регистрация версии в сервисе
+    - echo "Register version"
+    - currentDate="$(date +'%Y-%m-%d %T')"
+    - echo $currentDate
+    - > 
+      curl -X POST "$VERSION_REGISTRATION_SERVICE_PATH" 
+      -H "accept: text/plain" 
+      -H "Content-Type: application/json-patch+json"
+      --data "{\"id\":0,\"serviceCode\":\"$SERVICE_NAME\",\"version\":\"$VERSION\",\"dueDate\":\"$currentDate\",\"description\":\"$CI_COMMIT_MESSAGE\"}"
+
+
+AccountingSystemDeploy:Development:
+  stage: deploy-to-test
+  variables:
+    DEPLOY_SERVICE_NAME_PREFIX: "development"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+AccountingSystemDeploy:Test:
+  stage: deploy-to-test
+  variables:
+    DEPLOY_SERVICE_NAME_PREFIX: "test"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+AccountingSystemDeploy:Staging:
+  stage: deploy-to-test
+  variables:
+    DEPLOY_SERVICE_NAME_PREFIX: "staging"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-acc-system-production
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual
+
+
+AccountingSystemDeploy:Production:
+  stage: deploy-to-production
+  variables:
+    DEPLOY_SERVICE_NAME_PREFIX: "production"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-acc-system-production
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: manual

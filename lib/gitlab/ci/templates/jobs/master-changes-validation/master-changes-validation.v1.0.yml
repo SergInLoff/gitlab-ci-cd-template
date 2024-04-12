@@ -1,0 +1,117 @@
+.master_changes_validation_template:
+  variables:
+    GIT_CHECKOUT: "false"
+    OPENED_MERGE_REQUESTS_FILE: "merge_requests.json"
+    PIPELINE_IDS_FILE: "pipeline_ids.json"
+    FIRST_DOWNSTREAM_PIPELINE_FILE: "first_downstream_pipeline_file.json"
+    SECOND_DOWNSTREAM_PIPELINE_FILE: "second_downstream_pipeline_file.json"
+    REQUEST_ENDING_JOBS_FILE: "request_ending_jobs.json"
+    COMPARE_BRANCH_RESULT_FILE: "need_update_branch_file.json"
+  tags:
+    - services-builder-docker
+  allow_failure: false
+  script:
+    - echo MERGE_REQUESTS_IIDS $MERGE_REQUESTS_IIDS
+    - echo PIPELINE_IDS $PIPELINE_IDS
+    - echo FIRST_DOWNSTREAM_PIPELINE_ID $FIRST_DOWNSTREAM_PIPELINE_ID
+    - echo SECOND_DOWNSTREAM_PIPELINE_ID $SECOND_DOWNSTREAM_PIPELINE_ID
+
+    - apt-get update
+    - apt-get install -y curl
+    - apt-get install -y jq
+
+    - echo CI_PROJECT_ID $CI_PROJECT_ID
+    - echo CI_MERGE_REQUEST_IID $CI_MERGE_REQUEST_IID
+    - echo CI_DEFAULT_BRANCH $CI_DEFAULT_BRANCH
+    - echo CI_COMMIT_REF_NAME $CI_COMMIT_REF_NAME
+    - echo CSHARP_API_ACCESS_TOKEN $CSHARP_API_ACCESS_TOKEN
+
+    - >
+      curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/merge_requests?state=opened"
+      -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}"
+      > $OPENED_MERGE_REQUESTS_FILE
+
+    - MERGE_REQUESTS_IIDS=$(cat $OPENED_MERGE_REQUESTS_FILE | jq '.[].iid')
+    - echo MERGE_REQUESTS_IIDS $MERGE_REQUESTS_IIDS
+
+    - >
+      for MERGE_REQUESTS_IID in ${MERGE_REQUESTS_IIDS[@]};
+      do
+          if [[ $MERGE_REQUESTS_IID == $CI_MERGE_REQUEST_IID ]]; then
+            continue;
+          fi;
+
+          echo MERGE_REQUESTS_IID $MERGE_REQUESTS_IID
+          
+          curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/merge_requests/${MERGE_REQUESTS_IID}/pipelines" -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}" > $PIPELINE_IDS_FILE
+
+          PIPELINE_IDS=$(cat $PIPELINE_IDS_FILE | jq '.[].id')
+          echo "" > $PIPELINE_IDS_FILE
+          echo PIPELINE_IDS $PIPELINE_IDS
+
+          for PIPELINE_ID in ${PIPELINE_IDS[@]};
+          do
+              echo PIPELINE_ID $PIPELINE_ID
+
+              curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/pipelines/${PIPELINE_ID}/bridges" -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}" > $FIRST_DOWNSTREAM_PIPELINE_FILE  || true
+
+              FIRST_DOWNSTREAM_PIPELINE_ID=$(cat $FIRST_DOWNSTREAM_PIPELINE_FILE | jq '.[0] .downstream_pipeline.id'  || true)
+              echo "" > $FIRST_DOWNSTREAM_PIPELINE_FILE
+              echo FIRST_DOWNSTREAM_PIPELINE_ID $FIRST_DOWNSTREAM_PIPELINE_ID
+
+              curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/pipelines/${FIRST_DOWNSTREAM_PIPELINE_ID}/bridges" -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}" > $SECOND_DOWNSTREAM_PIPELINE_FILE  || true
+
+              SECOND_DOWNSTREAM_PIPELINE_ID=$(cat $SECOND_DOWNSTREAM_PIPELINE_FILE | jq '.[] | select(any(. == '\"$SERVICE_NAME\"')) | .downstream_pipeline.id' || true)
+              echo "" > $SECOND_DOWNSTREAM_PIPELINE_FILE
+              echo SECOND_DOWNSTREAM_PIPELINE_ID $SECOND_DOWNSTREAM_PIPELINE_ID
+
+              curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/pipelines/${SECOND_DOWNSTREAM_PIPELINE_ID}/jobs" -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}" > $REQUEST_ENDING_JOBS_FILE  || true
+
+              DEPLOY_TO_PROD_JOB_STATUS=$(cat $REQUEST_ENDING_JOBS_FILE | jq '.[] | select(any(. == "deploy-to-production")) | .status'  || true)
+              echo "" > $REQUEST_ENDING_JOBS_FILE
+              echo DEPLOY_TO_PROD_JOB_STATUS $DEPLOY_TO_PROD_JOB_STATUS
+
+              if [[ $DEPLOY_TO_PROD_JOB_STATUS == "\"success\"" ]]; then
+                  echo "ERROR: Есть МР, который был выведен в прод, но не смержен."
+                  echo "CAN_DEPLOY_TO_PROD=false" >> can_deploy.env
+                  exit 1;
+              fi;
+          done
+      done
+
+    - rm $OPENED_MERGE_REQUESTS_FILE
+
+    - >
+      curl -X GET "https://gitlab.dobrozaim.ru/api/v4/projects/${CI_PROJECT_ID}/repository/compare?from=${CI_COMMIT_REF_NAME}&to=${CI_DEFAULT_BRANCH}&straight=true"
+      -H "PRIVATE-TOKEN: ${CSHARP_API_ACCESS_TOKEN}"
+      > $COMPARE_BRANCH_RESULT_FILE
+
+    - NEED_UPDATE_CURRENT_BRANCH=$(cat $COMPARE_BRANCH_RESULT_FILE | jq '. | .commits | length')
+    - echo "" > $COMPARE_BRANCH_RESULT_FILE
+    - echo NEED_UPDATE_CURRENT_BRANCH $NEED_UPDATE_CURRENT_BRANCH
+    - rm $COMPARE_BRANCH_RESULT_FILE
+
+    - >
+      if [[ $NEED_UPDATE_CURRENT_BRANCH != 0 ]]; then
+        echo "ERROR: Мастер отличается от текущей базовой ветки на $NEED_UPDATE_CURRENT_BRANCH моммит(-а)."
+        echo "CAN_DEPLOY_TO_PROD=false" >> can_deploy.env
+        exit 1;
+      fi;
+
+    - echo "CAN_DEPLOY_TO_PROD=true" >> can_deploy.env
+
+master-changes-validation:
+  extends: .master_changes_validation_template
+  stage: master-changes-validation
+  rules:
+    - when: always
+  allow_failure: true
+
+deploy-to-production-validation:
+  extends: .master_changes_validation_template
+  stage: deploy-to-production-validation
+  allow_failure: true
+  artifacts:
+    reports:
+      dotenv: can_deploy.env
+  when: manual

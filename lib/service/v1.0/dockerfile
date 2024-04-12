@@ -1,0 +1,16 @@
+FROM mcr.microsoft.com/dotnet/sdk:5.0-buster-slim AS build
+
+COPY NuGet.config /root/.nuget/NuGet/NuGet.Config
+COPY /src/TestApp/	src/TestApp/
+
+FROM build AS publish
+WORKDIR "/src/TestApp"
+RUN dotnet restore "TestApp.csproj"
+RUN dotnet publish "TestApp.csproj" -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:5.0-buster-slim AS runtime
+
+COPY --from=publish /app/publish /app/
+
+WORKDIR /app
+ENTRYPOINT ["dotnet", "TestApp.dll"]

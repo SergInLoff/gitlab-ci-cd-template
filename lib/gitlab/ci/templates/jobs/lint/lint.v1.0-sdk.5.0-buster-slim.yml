@@ -1,0 +1,27 @@
+lint:
+  image: mcr.microsoft.com/dotnet/sdk:5.0-buster-slim
+  stage: lint
+  tags:
+    - services-builder
+  script:
+    - if [[ -z ${PROJECT_PATH} ]]; then
+        echo "The project file path isn't defined!";
+        exit 1;
+      fi;
+      # устанавливаем линтер в каждый проект
+    - >
+      find . -type f -name "*.csproj" | while read -r line ; do
+        echo "Processing $line"
+        dotnet add "$line" package StyleCop.Analyzers
+      done
+    - echo "Done"
+    # выполняем сборку
+    - dotnet build ${PROJECT_PATH}
+  only:
+    variables:
+      - $CONFIRM_LINT_STAGE == "true"
+  except:
+    - /^stable-*/
+    - $CI_DEFAULT_BRANCH
+    - master
+  when: on_success

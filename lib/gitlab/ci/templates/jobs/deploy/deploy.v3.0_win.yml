@@ -1,0 +1,54 @@
+.base_deploy_to_swarm_template:
+  script:
+    - echo CAN_DEPLOY_TO_PROD $CAN_DEPLOY_TO_PROD
+    - >
+      if ("$CAN_DEPLOY_TO_PROD" -eq "false" -or "$CAN_DEPLOY_TO_PROD" -eq "") {
+        echo "Не пройдена проверка на изменения в мастер ветке.";
+        exit 1;
+      }
+
+    - echo "Service version - ${VERSION}"
+
+    - SCHTASKS /End /tn ${SERVICE_NAME}
+    - sleep 10
+    - copy -Force publish.tar.gz C:/Services/${SERVICE_NAME}/
+    - tar -xzvf C:/Services/${SERVICE_NAME}/publish.tar.gz -C C:/Services/${SERVICE_NAME}
+    - Get-ChildItem -Path C:/Services/${SERVICE_NAME}/* -Exclude publish | Get-ChildItem -Recurse | Remove-Item -ErrorAction SilentlyContinue
+    - mv C:/Services/${SERVICE_NAME}/publish/* C:/Services/${SERVICE_NAME}/
+    - rmdir C:/Services/${SERVICE_NAME}/publish
+    - SCHTASKS /Run /tn ${SERVICE_NAME}
+
+Deploy:Production_Node1:
+  stage: deploy-to-production
+  environment: Production
+  needs:
+    - job: deploy-to-production-validation
+    - job: delivery
+      artifacts: true
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - deploy-windows-1
+  when: manual
+
+Deploy:Production_Node2:
+  stage: deploy-to-production
+  environment: Production
+  needs:
+    - job: deploy-to-production-validation
+    - job: delivery
+      artifacts: true
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - deploy-windows-2
+  when: manual
+
+Deploy:Stage:
+  stage: deploy-to-test
+  environment: Staging
+  extends: .base_deploy_to_swarm_template
+  needs:
+    - job: delivery
+      artifacts: true
+  tags:
+    - deploy-windows-stage
+  when: manual

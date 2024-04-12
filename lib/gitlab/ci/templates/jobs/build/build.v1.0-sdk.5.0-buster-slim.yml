@@ -1,0 +1,21 @@
+build:
+  image: mcr.microsoft.com/dotnet/sdk:5.0-buster-slim
+  stage: build
+  tags:
+    - services-builder
+  script:
+    - if [[ -z ${PROJECT_PATH} ]]; then
+        echo "The project file path isn't defined!";
+        exit 1;
+      fi;
+    
+    - dotnet build  ${PROJECT_PATH}  --configuration Release
+  only:
+    variables:
+      - $CONFIRM_BUILD_STAGE == "true"
+  except:
+    - /^stable-*/
+    - $CI_DEFAULT_BRANCH
+    - master
+  when: on_success
+  

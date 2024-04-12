@@ -1,0 +1,36 @@
+${SERVICE_NAME}-copy-artifacts:
+  stage: prepare-artifacts
+  tags:
+    - services-builder-docker
+  script:
+    - cat services/${SERVICE_NAME}-config.yml
+  needs:
+    - pipeline: "${CI_PIPELINE_ID}"
+      job: "generate-config"
+  artifacts:
+    paths: 
+      - services/${SERVICE_NAME}-config.yml
+
+${SERVICE_NAME}:
+  stage: trigger
+  trigger:
+    strategy: depend
+    include:
+      - artifact: services/${SERVICE_NAME}-config.yml
+        job: ${SERVICE_NAME}-copy-artifacts
+  variables:
+    PARENT_PIPELINE_ID: ${CI_PIPELINE_ID}
+    VERSION: ${VERSION}
+    DOCKER_FILE_PATH: ${DOCKER_FILE_PATH}
+    PROJECT_PATH: ${PROJECT_PATH}
+    TEST_PROJECT_PATH: "${TEST_PROJECT_PATH}"
+    IMAGE_LIBRARY: "${IMAGE_LIBRARY}"
+    SERVICE_NAME:  ${SERVICE_NAME}
+    NUGET_PROJECT_PATH:  "${NUGET_PROJECT_PATH}"
+    CAN_DEPLOY_TO_PROD: "true"
+    ACCOUNTING_SYSTEM_ENVIRONMENT: ${ACCOUNTING_SYSTEM_ENVIRONMENT}
+    ACCOUNTING_SYSTEM_CONTRACTS_QUANTITY: ${ACCOUNTING_SYSTEM_CONTRACTS_QUANTITY}
+    STACK_NAME: "${STACK_NAME}"
+    STACK_BELONG_FEATURE: ${STACK_BELONG_FEATURE}
+    PORTAINER_USERNAME: "${CI_PORTAINER_USER}"
+    PORTAINER_PASSWORD: "${CI_PORTAINER_PASS}"

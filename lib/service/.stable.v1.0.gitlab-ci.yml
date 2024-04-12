@@ -1,0 +1,77 @@
+default:
+  before_script:
+   # Определяем файл с определением параметров для сервиса test
+    - declare -A service_config
+    - service_config['test-app']='lib/service/v1.0/env.local'
+
+    # Приоритет у label мерджа, чтобы была возможность
+    # из разных веток собирать сервис при создании MR
+    - if [[ -n $CI_MERGE_REQUEST_LABELS ]]; then
+        WORKING_BRANCH=$CI_MERGE_REQUEST_LABELS;
+      else
+        WORKING_BRANCH=$CI_COMMIT_REF_NAME;
+      fi;
+
+    - echo $WORKING_BRANCH
+    
+    - for service in "${!service_config[@]}"; do
+        if [[ "$WORKING_BRANCH" == $service ]] || [[ "$WORKING_BRANCH" =~ ^([0-9]+)-$service-* ]] || [[ "$WORKING_BRANCH" =~ ^stable-$service-* ]]; then
+          ENV_PARAMS_FILE="${service_config[$service]}";
+          break;
+        fi;
+      done
+
+    # Далее копирование файлов
+    - echo ${ENV_PARAMS_FILE}
+    # - echo ${ENV_PARAMS_CLEAN_FILE}
+
+    - if [[ -n $ENV_PARAMS_FILE ]]; then
+        export $(cat ${ENV_PARAMS_FILE} | xargs);
+      else
+        echo "The path of environment file is null!";
+        exit 1;
+      fi;
+
+    
+    - if [[ -z ${PROJECT_PATH} ]]; then
+        echo "The service project path isn't defined!";
+        exit 1;
+      fi;
+
+      # Определение версии приложения
+    - export VERSION="$(grep '<Version>.*</Version>' ${PROJECT_PATH} | sed 's/[<>/ ]//g; s/Version//g; s/  //g')"
+    - if [[ -z ${VERSION} ]]; then
+        export VERSION="1.0.0";
+      fi;
+    - echo "Service version - ${VERSION}"
+
+
+  # Параметры GitLab
+    - echo ${CI_MERGE_REQUEST_ID}
+    - echo ${CI_PIPELINE_ID}
+  # Параметры проектов, по которым необходимо выполнить проверку и регистрацию тестов
+    - echo ${IMAGE_NAME}
+    - echo ${ENV_PARAMS_FILE}
+    # - echo ${ENV_PARAMS_CLEAN_FILE}
+    - echo ${SERVICE_NAME}
+    - echo ${VERSION}
+    - echo ${DOCKER_FILE_PATH}
+    - echo ${PROJECT_PATH}
+    - echo ${SETTINGS_FILE_PATH}
+    - echo ${TEST_PROJECT_PATH}
+    - echo ${DEPLOY_ENVIRONMENT}
+    - echo ${DEPLOY_NAMESPACE}
+    - echo ${CI_ENVIRONMENT_NAME}
+    - echo ${GITLAB_USER_LOGIN}
+    - echo Ветка мерджа $CI_COMMIT_BRANCH
+    - echo ветка по умолчанию $CI_DEFAULT_BRANCH
+    - echo $CI_JOB_STAGE
+
+
+include:
+  - project: 'csharp/devops'
+    ref: 'master'
+    file: 'lib/gitlab/ci/templates/.gitlab-ci.v1.0.yml'
+  - project: 'csharp/devops'
+    ref: 'master'
+    file: 'lib/gitlab/ci/templates/jobs/build/build.v1.0-sdk.5.0-buster-slim.yml'

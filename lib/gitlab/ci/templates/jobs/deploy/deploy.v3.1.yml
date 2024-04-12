@@ -1,0 +1,48 @@
+Deploy:Test:
+  image: image-registry.dobrozaim.ru/services_department/docker_advanced:stable
+  stage: deploy-to-test
+  environment: Test
+  variables:
+    GIT_CHECKOUT: "false"
+    PORTAINER_INSTANCE: "http://dotnet.dobrozaim.test:9000"
+    PORTAINER_ENDPOINT_ID: "1"
+  extends: .base_deploy_to_stack_template
+  tags:
+    - services-test-docker
+  when: manual
+
+
+Deploy:Staging:
+  image: image-registry.dobrozaim.ru/services_department/docker_advanced:stable
+  stage: deploy-to-test
+  environment: Staging
+  variables:
+    GIT_STRATEGY: clone
+    GIT_CHECKOUT: "false"
+    PORTAINER_INSTANCE: "http://services-test4.dobrozaim.ru:9000"
+    PORTAINER_ENDPOINT_ID: "2"
+  extends: .base_deploy_to_stack_template
+  tags:
+    - services-staging-docker
+  when: manual
+
+
+Deploy:Production:
+  image: image-registry.dobrozaim.ru/services_department/docker_advanced:stable
+  stage: deploy-to-production
+  environment: Production
+  needs:
+    - job: deploy-to-production-validation
+  variables:
+    GIT_CHECKOUT: "false"
+    PORTAINER_INSTANCE: "http://dotnet.dobrozaim.ru:9000"
+    PORTAINER_ENDPOINT_ID: "6"
+  extends: .base_deploy_to_stack_template
+  tags:
+    - services-production-docker
+  after_script:
+    - echo "DEPLOY_JOB_STATUS = $CI_JOB_STATUS" >> job.env
+  when: manual
+  artifacts:
+    reports:
+      dotenv: job.env

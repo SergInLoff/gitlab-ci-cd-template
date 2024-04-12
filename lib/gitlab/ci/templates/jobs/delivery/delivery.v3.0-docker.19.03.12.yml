@@ -1,0 +1,38 @@
+.base_delivery_template:
+  image: docker:19.03.12
+  stage: delivery
+  tags:
+    - services-builder
+  script:
+    - if [[ -z ${DOCKER_FILE_PATH} ]]; then
+        echo "The project dockerfile path isn't defined!";
+        exit 1;
+      elif [[ -z ${SERVICE_NAME} ]]; then
+        echo "The service name isn't defined!";
+        exit 1;
+      elif [[ -z ${VERSION} ]]; then
+        echo "The service version isn't defined!";
+        exit 1;
+      elif [[ -z ${REGISTRY_SERVER_HARBOR} ]]; then
+        echo "The path of docker registry server isn't defined!";
+        exit 1;
+      fi;
+
+    - export COMPLETED_VERSION=$(echo $VERSION | awk -v new_number="$CI_PIPELINE_ID" -F. '{print $1"."$2"."$3"."new_number}')
+
+    - export IMAGE_NAME=${SERVICE_NAME}
+    - envsubst < ${DOCKER_FILE_PATH} > ${IMAGE_NAME}
+
+    - docker build -t ${IMAGE_NAME}:${COMPLETED_VERSION} -f ${IMAGE_NAME} .
+    - if [[ -z ${IMAGE_LIBRARY} ]]; then
+        docker tag ${IMAGE_NAME}:${COMPLETED_VERSION} $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${COMPLETED_VERSION};
+        docker push $REGISTRY_SERVER_HARBOR/${IMAGE_NAME}:${COMPLETED_VERSION};
+      else
+        docker tag ${IMAGE_NAME}:${COMPLETED_VERSION} $REGISTRY_SERVER_HARBOR/${IMAGE_LIBRARY}/${IMAGE_NAME}:${COMPLETED_VERSION};
+        docker push $REGISTRY_SERVER_HARBOR/${IMAGE_LIBRARY}/${IMAGE_NAME}:${COMPLETED_VERSION};
+      fi;
+
+
+delivery:
+  extends: .base_delivery_template
+  when: manual

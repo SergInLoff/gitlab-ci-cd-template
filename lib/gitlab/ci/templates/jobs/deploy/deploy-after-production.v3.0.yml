@@ -1,0 +1,24 @@
+PostMergeDeploy:Test:
+  stage: deploy-to-test-after-production
+  environment: Test
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  when: on_success
+
+
+PostMergeDeploy:Staging:
+  stage: deploy-to-test-after-production
+  environment: Staging
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test4
+  when: on_success
+
+PostMergeDeploy:Production:
+  stage: deploy-to-production
+  environment: Production
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-production
+  when: on_success

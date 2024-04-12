@@ -1,0 +1,24 @@
+.base_nuget_template:
+  stage: delivery
+  script:
+    - if [[ -z ${NUGET_PROJECT_PATH} ]]; then
+        echo "The project version isn't defined!";
+        exit 1;
+      fi;    
+    
+    - if [ -d "${NUGET_PROJECT_PATH}/wwwroot" ] ; then
+        echo "deleted wwwroot for UI!";      
+        rm ${NUGET_PROJECT_PATH}/wwwroot  -r;
+      fi;       
+
+    - dotnet pack ${NUGET_PROJECT_PATH} -c Release -o $PWD/nuget
+    - dotnet nuget push "$PWD/nuget/*.nupkg" --source gitlab
+
+nuget:
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  environment: nuget
+  tags:
+    - services-builder-docker  
+  extends: .base_nuget_template
+  when: manual
+

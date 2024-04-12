@@ -1,0 +1,22 @@
+PostProductionDeploy:Test:
+  stage: deploy-to-test-after-production
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  only:
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/ 
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: on_success
+
+
+PostProductionDeploy:Staging:
+  stage: deploy-to-test-after-production
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test4
+  only:
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^stable-*/
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  when: on_success

@@ -1,0 +1,54 @@
+.base_deploy_to_swarm_template:
+  script:
+    - echo CAN_DEPLOY_TO_PROD $CAN_DEPLOY_TO_PROD
+    - if [[ "$CAN_DEPLOY_TO_PROD" == 'false' ]] || [[ "$CAN_DEPLOY_TO_PROD" == '' ]]; then
+        echo 'Не пройдена проверка на изменения в мастер ветке.';
+        exit 1;
+      fi;
+
+    - if [[ -z ${VERSION} ]]; then
+        echo "The project version isn't defined!";
+        exit 1;
+      fi;
+    - if [[ -z ${SERVICE_NAME} ]]; then
+        echo "The service name isn't defined!";
+        exit 1;
+      elif [[ -z ${REGISTRY_SERVER_HARBOR} ]]; then
+        echo "The path of docker registry server isn't defined!";
+        exit 1;
+      fi;
+
+    - echo "Service version - ${VERSION}"
+
+    - export COMPLETED_VERSION=$(echo $VERSION | awk -v new_number="$CI_PIPELINE_ID" -F. '{print $1"."$2"."$3"."new_number}')
+
+    - if [[ -z ${IMAGE_LIBRARY} ]]; then
+        IMAGE=${SERVICE_NAME};
+      else
+        IMAGE="${IMAGE_LIBRARY}/${SERVICE_NAME}";
+      fi;
+    
+    - docker image pull $REGISTRY_SERVER_HARBOR/${IMAGE}:${COMPLETED_VERSION}
+
+    - if ! [[ "$(docker image inspect $REGISTRY_SERVER_HARBOR/${IMAGE}:${COMPLETED_VERSION} --format="1")" == "1" ]]; then
+        echo "The image ${IMAGE} isn't  exists!";
+        exit 1;
+      fi;
+
+    - echo ${IMAGE}
+    - docker service update --image $REGISTRY_SERVER_HARBOR/${IMAGE}:${COMPLETED_VERSION} --hostname ${SERVICE_NAME} ${SERVICE_NAME}
+    - echo "Service ${SERVICE_NAME} updated!"
+
+    - if [[ $CI_JOB_STAGE != "deploy-to-production" ]]; then
+        exit 0;
+      fi;
+
+    # Регистрация версии в сервисе
+    - echo "Register version"
+    - currentDate="$(date +'%Y-%m-%d %T')"
+    - echo $currentDate
+    - > 
+      curl -X POST "$VERSION_REGISTRATION_SERVICE_PATH" 
+      -H "accept: text/plain" 
+      -H "Content-Type: application/json-patch+json"
+      --data "{\"id\":0,\"serviceCode\":\"$SERVICE_NAME\",\"version\":\"$COMPLETED_VERSION\",\"dueDate\":\"$currentDate\",\"description\":\"$CI_COMMIT_MESSAGE\"}"

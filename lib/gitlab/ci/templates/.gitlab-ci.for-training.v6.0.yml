@@ -1,0 +1,6 @@
+include:
+  - local: 'lib/gitlab/ci/templates/base-gitlab-ci.v3.0.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/test/unit/unit-test.v3.0-sdk.6.0-bullseye-slim.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/delivery/delivery.v3.2-docker.19.03.12.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/deploy/deploy.v1.1-base.yml'
+  - local: 'lib/gitlab/ci/templates/jobs-for-training/deploy-without-production.v3.0.yml'

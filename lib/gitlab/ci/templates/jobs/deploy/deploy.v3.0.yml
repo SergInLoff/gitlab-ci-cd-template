@@ -1,0 +1,51 @@
+Deploy:Development:
+  stage: deploy-to-test
+  environment: Development
+  variables:
+    GIT_CHECKOUT: "false"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-dev
+  when: manual
+
+
+
+Deploy:Test:
+  stage: deploy-to-test
+  environment: Test
+  variables:
+    GIT_CHECKOUT: "false"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test
+  when: manual
+
+
+Deploy:Staging:
+  stage: deploy-to-test
+  environment: Staging
+  variables:
+    GIT_STRATEGY: clone
+    GIT_CHECKOUT: "false"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-test4
+  when: manual
+
+
+Deploy:Production:
+  stage: deploy-to-production
+  environment: Production
+  needs:
+    - job: deploy-to-production-validation
+  variables:
+    GIT_CHECKOUT: "false"
+  extends: .base_deploy_to_swarm_template
+  tags:
+    - services-production
+  after_script:
+    - echo "DEPLOY_JOB_STATUS = $CI_JOB_STATUS" >> job.env
+  when: manual
+  artifacts:
+    reports:
+      dotenv: job.env

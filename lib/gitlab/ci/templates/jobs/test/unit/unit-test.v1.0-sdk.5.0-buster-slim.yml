@@ -1,0 +1,20 @@
+test:
+  image: mcr.microsoft.com/dotnet/sdk:5.0-buster-slim
+  stage: test
+  tags:
+    - services-builder
+  script:
+    - if [[ -z ${TEST_PROJECT_PATH} ]]; then
+        echo "The test project file path isn't defined!";
+        exit 1;
+      fi;
+
+    - dotnet test ${TEST_PROJECT_PATH}
+  only:
+    variables:
+      - $CONFIRM_TEST_STAGE == "true"
+  except:
+    - /^stable-*/
+    - $CI_DEFAULT_BRANCH
+    - master
+  when: on_success

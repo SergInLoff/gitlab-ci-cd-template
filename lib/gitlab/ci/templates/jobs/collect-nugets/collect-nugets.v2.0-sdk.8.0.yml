@@ -1,0 +1,27 @@
+collect-nugets:
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  stage: extra
+  needs:
+    - job: Deploy:Production
+  tags:
+    - services-production
+  script: 
+ 
+    - export NUGETS_NAME="$(cat ${PROJECT_PATH} | tr -d '\r\n' | grep -oP '<ItemGroup.*?<PackageReference.*?</ItemGroup>' | tr -d '\n')" 
+
+    - echo $NUGETS_NAME
+    - echo $DEPLOY_JOB_STATUS
+
+    
+    - if [[ "$DEPLOY_JOB_STATUS" == 'failed' ]] || [[ "$DEPLOY_JOB_STATUS" == 'canceled' ]] || [[ "$DEPLOY_JOB_STATUS" == '' ]]; then
+        echo 'Last job is canceled or failed';
+        exit 1;
+      fi;
+
+    - > 
+      curl -X POST "$VERSION_NUGETS_REGISTRATION_SERVICE_PATH" 
+      -H "accept: text/plain" 
+      -H "Content-Type: application/xml"
+      --data "<?xml version=\"1.0\" encoding=\"UTF-8\"?><NugetsByServiceRequest><serviceCode>$SERVICE_NAME</serviceCode>$NUGETS_NAME</NugetsByServiceRequest>"
+   
+  when: on_success

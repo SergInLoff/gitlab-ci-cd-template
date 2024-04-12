@@ -1,0 +1,43 @@
+.base_nuget_template:
+  stage: nuget
+  script:
+    - if [[ -z ${NUGET_PROJECT_PATH} ]]; then
+        echo "The project version isn't defined!";
+        exit 1;
+      fi;    
+    
+    - if [ -d "${NUGET_PROJECT_PATH}/wwwroot" ] ; then
+        echo "deleted wwwroot for UI!";      
+        rm ${NUGET_PROJECT_PATH}/wwwroot  -r;
+      fi;       
+
+    - dotnet pack ${NUGET_PROJECT_PATH} -c Release -o $PWD/nuget
+    - dotnet nuget push "$PWD/nuget/*.nupkg" --source gitlab
+
+nuget:Staging:
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  environment: nuget
+  tags:
+    - services-builder  
+  extends: .base_nuget_template
+  only:
+    refs:
+      - merge_requests
+    variables:
+      - $GITLAB_USER_LOGIN == "deriglazov.v"
+  except:
+    variables:
+      - $CI_MERGE_REQUEST_TARGET_BRANCH_NAME != $CI_DEFAULT_BRANCH
+  when: manual
+
+nuget:Production:
+  image: mcr.microsoft.com/dotnet/sdk:5.0
+  environment: nuget
+  tags:
+    - services-builder  
+  extends: .base_nuget_template
+  only:
+    variables:
+      - $CI_COMMIT_REF_NAME =~ /^stable-*/
+      - $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+  when: on_success

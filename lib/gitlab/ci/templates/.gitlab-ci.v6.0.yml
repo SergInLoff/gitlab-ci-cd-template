@@ -1,0 +1,13 @@
+include:
+  - local: 'lib/gitlab/ci/templates/base-gitlab-ci.v3.0.yml'
+  #- local: 'lib/gitlab/ci/templates/jobs/build/build.v3.0-sdk.6.0-bullseye-slim.yml'
+
+  - local: 'lib/gitlab/ci/templates/jobs/lint/lint.v3.0-sdk.6.0-bullseye-slim.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/test/unit/unit-test.v3.0-sdk.6.0-bullseye-slim.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/delivery/delivery.v3.2-docker.19.03.12.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/nuget/nuget.v3.0-sdk6.0-bullseye-slim.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/deploy/deploy.v3.1-base.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/master-changes-validation/master-changes-validation.v1.0.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/deploy/deploy.v3.1.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/collect-nugets/collect-nugets.v2.0.yml'
+  - local: 'lib/gitlab/ci/templates/jobs/docs/docfx.v1.0.yml'
